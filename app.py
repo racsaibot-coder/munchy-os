@@ -1,130 +1,121 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for
-import json
 import os
-from datetime import datetime
+from flask import Flask, render_template, request, jsonify, redirect, url_for
+from supabase import create_client, Client
 
 app = Flask(__name__)
 
-# --- Config & Data Helpers ---
-INVENTORY_FILE = 'inventory.json'
-SALES_FILE = 'sales.json'
+# CONFIG (In production, move these to Vercel Environment Variables)
+SUPABASE_URL = "https://mtscvmxqhigyijcsozgd.supabase.co"
+SUPABASE_KEY = "sb_publishable_ThXosDHFvZjyk02iWoFqXQ_dAVDKGVE"
 
-def load_json(filename):
-    if not os.path.exists(filename):
-        return []
-    with open(filename, 'r') as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            return []
-
-def save_json(filename, data):
-    with open(filename, 'w') as f:
-        json.dump(data, f, indent=4)
-
-# --- Routes ---
+# Initialize Supabase
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 @app.route('/')
-def home():
+def index():
     return redirect(url_for('shop'))
 
 @app.route('/shop')
 def shop():
-    inventory = load_json(INVENTORY_FILE)
-    # Only show items in stock
-    available_items = [item for item in inventory if item.get('stock', 0) > 0]
-    return render_template('shop.html', items=available_items)
+    try:
+        response = supabase.table('inventory').select("*").order('stock', desc=True).execute()
+        inventory = response.data
+    except Exception as e:
+        print(f"DB Error: {e}")
+        inventory = []
+    return render_template('shop.html', inventory=inventory)
 
 @app.route('/admin')
 def admin():
-    inventory = load_json(INVENTORY_FILE)
-    sales = load_json(SALES_FILE)
-    
-    # Calculate stats
-    total_sales = sum(sale['price'] for sale in sales)
-    total_profit = sum(sale['profit'] for sale in sales)
-    items_sold = len(sales)
-    
-    return render_template('admin.html', 
-                           inventory=inventory, 
-                           stats={
-                               'revenue': total_sales,
-                               'profit': total_profit,
-                               'sales_count': items_sold
-                           })
+    try:
+        # Fetch Inventory
+        inv_res = supabase.table('inventory').select("*").execute()
+        inventory = inv_res.data
+        
+        # Fetch Orders
+        ord_res = supabase.table('orders').select("*").order('created_at', desc=True).execute()
+        orders = ord_res.data
+        
+        # Calc Stats
+        total_profit = 0
+        items_sold = 0
+        revenue = 0
+        
+        for o in orders:
+            if o['status'] == 'paid':
+                items_sold += 1
+                revenue += float(o['price'])
+                # Find cost of item to calc profit (Simplified: using current cost)
+                # In a robust system, we'd store cost at time of sale.
+                item = next((i for i in inventory if i['name'] == o['item_name']), None)
+                if item:
+                    cost = float(item['cost'])
+                    total_profit += (float(o['price']) - cost)
 
-# --- API Endpoints ---
+    except Exception as e:
+        print(f"DB Error: {e}")
+        inventory = []
+        orders = []
+        total_profit = 0
+        items_sold = 0
+        revenue = 0
+
+    return render_template('admin.html', inventory=inventory, orders=orders, stats={
+        "profit": f"{total_profit:.2f}",
+        "revenue": f"{revenue:.2f}",
+        "sold": items_sold
+    })
 
 @app.route('/api/reserve', methods=['POST'])
-def reserve_item():
+def reserve():
     data = request.json
-    item_id = int(data.get('id'))
-    student_name = data.get('name')
+    item_name = data.get('item_name')
+    student_name = data.get('student_name')
+    price = data.get('price')
     
-    inventory = load_json(INVENTORY_FILE)
-    sales = load_json(SALES_FILE)
+    # 1. Create Order
+    order_data = {
+        "student_name": student_name,
+        "item_name": item_name,
+        "price": price,
+        "status": "pending"
+    }
+    supabase.table('orders').insert(order_data).execute()
     
-    # Find item
-    item_index = next((i for i, item in enumerate(inventory) if item['id'] == item_id), None)
+    # 2. Decrement Stock
+    # Note: In a real app, use RPC for atomicity. For MVP, we fetch-update.
+    # We rely on the client to refresh, but let's try a direct decrement if possible?
+    # Supabase doesn't support 'increment' in simple client easily without RPC.
+    # We'll just assume stock management is loose for High School.
+    # Update: Let's fetch current stock first.
     
-    if item_index is not None and inventory[item_index]['stock'] > 0:
-        item = inventory[item_index]
-        
-        # Decrement stock
-        inventory[item_index]['stock'] -= 1
-        save_json(INVENTORY_FILE, inventory)
-        
-        # Record sale (reservation)
-        sale = {
-            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "item_name": item['name'],
-            "price": item['price'],
-            "cost": item['cost'],
-            "profit": item['price'] - item['cost'],
-            "student": student_name,
-            "status": "reserved"
-        }
-        sales.append(sale)
-        save_json(SALES_FILE, sales)
-        
-        return jsonify({"success": True, "message": "Item reserved!"})
-    
-    return jsonify({"success": False, "message": "Out of stock or invalid item."}), 400
+    res = supabase.table('inventory').select('stock, id').eq('name', item_name).execute()
+    if res.data:
+        current = res.data[0]['stock']
+        new_stock = max(0, current - 1)
+        supabase.table('inventory').update({'stock': new_stock}).eq('id', res.data[0]['id']).execute()
+
+    return jsonify({"success": True})
 
 @app.route('/api/add_item', methods=['POST'])
 def add_item():
     data = request.json
-    inventory = load_json(INVENTORY_FILE)
-    
-    new_id = 1
-    if inventory:
-        new_id = max(item['id'] for item in inventory) + 1
-        
-    new_item = {
-        "id": new_id,
-        "name": data['name'],
-        "image": data['image'] or "https://via.placeholder.com/150?text=No+Image",
-        "cost": float(data['cost']),
-        "price": float(data['price']),
-        "stock": int(data['stock'])
+    item_data = {
+        "name": data.get('name'),
+        "cost": float(data.get('cost')),
+        "price": float(data.get('price')),
+        "stock": int(data.get('stock')),
+        "image_url": data.get('image_url')
     }
-    
-    inventory.append(new_item)
-    save_json(INVENTORY_FILE, inventory)
-    
-    return jsonify({"success": True, "item": new_item})
+    supabase.table('inventory').insert(item_data).execute()
+    return jsonify({"success": True})
 
-@app.route('/api/delete_item', methods=['POST'])
-def delete_item():
+@app.route('/api/mark_paid', methods=['POST'])
+def mark_paid():
     data = request.json
-    item_id = int(data.get('id'))
-    inventory = load_json(INVENTORY_FILE)
-    
-    inventory = [item for item in inventory if item['id'] != item_id]
-    save_json(INVENTORY_FILE, inventory)
-    
+    order_id = data.get('id')
+    supabase.table('orders').update({"status": "paid"}).eq("id", order_id).execute()
     return jsonify({"success": True})
 
 if __name__ == '__main__':
-    # Run on 0.0.0.0 to be accessible on local network (e.g. from phone)
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True)

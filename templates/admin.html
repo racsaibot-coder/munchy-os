@@ -16,17 +16,44 @@
         <!-- Stats -->
         <div class="stats-container">
             <div class="stat-card">
-                <div class="stat-value">${{ "%.2f"|format(stats.profit) }}</div>
+                <div class="stat-value">${{ stats.profit }}</div>
                 <div class="stat-label">Total Profit</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">${{ "%.2f"|format(stats.revenue) }}</div>
+                <div class="stat-value">${{ stats.revenue }}</div>
                 <div class="stat-label">Revenue</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">{{ stats.sales_count }}</div>
+                <div class="stat-value">{{ stats.sold }}</div>
                 <div class="stat-label">Items Sold</div>
             </div>
+        </div>
+
+        <!-- Orders (The Hit List) -->
+        <div class="admin-section">
+            <h3>Pending Orders (Collect Cash)</h3>
+            <table style="margin-bottom: 20px;">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Item</th>
+                        <th>Due</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    {% if order.status == 'pending' %}
+                    <tr>
+                        <td>{{ order.student_name }}</td>
+                        <td>{{ order.item_name }}</td>
+                        <td style="color: #ff003c; font-weight: bold;">${{ order.price }}</td>
+                        <td><button onclick="markPaid({{ order.id }})" class="btn" style="background: #00ff9d; color: black; padding: 4px 8px; font-size: 0.8rem;">Paid ✅</button></td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
 
         <!-- Add Item Form -->
@@ -71,7 +98,6 @@
                         <th>Cost</th>
                         <th>Price</th>
                         <th>Margin</th>
-                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -85,9 +111,6 @@
                         <td class="{{ 'margin-high' if margin_percent > 40 else ('margin-mid' if margin_percent > 20 else 'margin-low') }}">
                             {{ "%.0f"|format(margin_percent) }}%
                         </td>
-                        <td>
-                            <button class="action-btn" onclick="deleteItem({{ item.id }})">×</button>
-                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -96,6 +119,15 @@
     </div>
 
     <script>
+        async function markPaid(id) {
+            await fetch('/api/mark_paid', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id})
+            });
+            window.location.reload();
+        }
+
         function calcMargin() {
             const cost = parseFloat(document.getElementById('newCost').value) || 0;
             const price = parseFloat(document.getElementById('newPrice').value) || 0;
@@ -115,10 +147,10 @@
         async function addItem() {
             const item = {
                 name: document.getElementById('newName').value,
-                image: document.getElementById('newImage').value,
                 cost: document.getElementById('newCost').value,
                 price: document.getElementById('newPrice').value,
-                stock: document.getElementById('newStock').value
+                stock: document.getElementById('newStock').value,
+                image_url: document.getElementById('newImage').value
             };
 
             if(!item.name || !item.price) return alert("Fill in the basics!");
@@ -129,16 +161,6 @@
                 body: JSON.stringify(item)
             });
             
-            if ((await res.json()).success) location.reload();
-        }
-
-        async function deleteItem(id) {
-            if(!confirm("Remove this item?")) return;
-            const res = await fetch('/api/delete_item', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id })
-            });
             if ((await res.json()).success) location.reload();
         }
     </script>

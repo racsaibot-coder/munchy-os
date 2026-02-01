@@ -123,7 +123,7 @@
             try {
                 const { data, error } = await supabase.from('settings').select('*');
                 if (error) {
-                    alert("DB Error: " + error.message);
+                    console.error("DB Error: " + error.message);
                     return;
                 }
                 if (data) {
@@ -133,8 +133,7 @@
                     });
                 }
             } catch (e) {
-                console.error(e);
-                // Fallback to default if offline
+                console.error("Network Error: " + e.message);
             }
         }
 
@@ -198,7 +197,7 @@
                     if (o.status === 'paid') {
                         sold++;
                         revenue += o.price;
-                        const item = inventory.find(i => i.name === o.item_name);
+                        const item = inventory ? inventory.find(i => i.name === o.item_name) : null;
                         if (item) profit += (o.price - item.cost);
                     }
                 });

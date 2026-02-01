@@ -122,13 +122,113 @@
     <script>
         // CONFIG
         const SUPABASE_URL = "https://mtscvmxqhigyijcsozgd.supabase.co";
-        // ... (rest of config)
+        const SUPABASE_KEY = "sb_publishable_ThXosDHFvZjyk02iWoFqXQ_dAVDKGVE";
+        
+        // Use 'dbClient' to avoid shadowing the global 'supabase' object from CDN
+        const dbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        let selectedLoadItem = null;
+        let dbPins = { admin: '1111', view: '2222' };
+        let userRole = null;
+
+        async function fetchPins() {
+            try {
+                const { data, error } = await dbClient.from('settings').select('*');
+                if (error) {
+                    alert("DB Error: " + error.message);
+                    return;
+                }
+                if (data) {
+                    data.forEach(row => {
+                        if (row.key === 'admin_pin') dbPins.admin = row.value;
+                        if (row.key === 'view_pin') dbPins.view = row.value;
+                    });
+                }
+            } catch (e) {
+                alert("Network Error: " + e.message);
+            }
+        }
+
+        async function checkPin() {
+            await fetchPins(); // Ensure fresh
+            const pin = document.getElementById('pin-input').value;
+            
+            if (pin === dbPins.admin) {
+                userRole = 'admin';
+                if (pin === '1111') return showResetModal();
+                unlock();
+            } else if (pin === dbPins.view) {
+                userRole = 'viewer';
+                if (pin === '2222') return showResetModal();
+                unlock();
+                // Hide controls for Mom
+                document.querySelectorAll('.btn-primary, .btn-outline, .action-btn').forEach(el => el.style.display = 'none');
+                document.querySelectorAll('.admin-section input').forEach(el => el.disabled = true);
+            } else {
+                document.getElementById('error-msg').style.display = 'block';
+                document.getElementById('pin-input').value = '';
+            }
+        }
+
+        function showResetModal() {
+            document.getElementById('login-modal').style.display = 'none';
+            document.getElementById('reset-modal').style.display = 'flex';
+        }
+
+        async function saveNewPin() {
+            const newPin = document.getElementById('new-pin').value;
+            if (newPin.length < 4) return alert("4 digits required.");
+            
+            const key = userRole === 'admin' ? 'admin_pin' : 'view_pin';
+            
+            await dbClient.from('settings').upsert({ key: key, value: newPin });
+            alert("PIN Updated! Please login with new PIN.");
+            window.location.reload();
+        }
+
+        function unlock() {
+            document.getElementById('login-modal').style.display = 'none';
+            document.getElementById('admin-content').style.filter = 'none';
+            document.getElementById('admin-content').style.pointerEvents = 'all';
+            loadAdmin();
+        }
 
         async function loadAdmin() {
-            // ... (fetch logic same) ...
-            
+            // Fetch Inventory
+            const { data: inventory } = await dbClient.from('inventory').select('*').order('name');
+            // Fetch Orders
+            const { data: orders } = await dbClient.from('orders').select('*').order('created_at', { ascending: false });
+
+            // Calc Stats
+            let profit = 0;
+            let revenue = 0;
+            let sold = 0;
+
+            if (orders) {
+                orders.forEach(o => {
+                    if (o.status === 'paid') {
+                        sold++;
+                        revenue += o.price;
+                        const item = inventory ? inventory.find(i => i.name === o.item_name) : null;
+                        if (item) profit += (o.price - item.cost);
+                    }
+                });
+            }
+
+            document.getElementById('stat-profit').innerText = "$" + profit.toFixed(2);
+            document.getElementById('stat-revenue').innerText = "$" + revenue.toFixed(2);
+            document.getElementById('stat-sold').innerText = sold;
+
+            // Render Orders
+            const pendingOrders = orders ? orders.filter(o => o.status === 'pending') : [];
+            document.getElementById('orders-table').innerHTML = pendingOrders.length ? pendingOrders.map(o => `
+                <tr>
+                    <td>${o.student_name}</td>
+                    <td>${o.item_name}</td>
+                    <td style="color: #ff003c; font-weight: bold;">$${o.price}</td>
+                    <td><button onclick="markPaid(${o.id})" class="btn" style="background: #00ff9d; color: black; padding: 4px 8px; font-size: 0.8rem;">Paid ✅</button></td>
+                </tr>
+            `).join('') : '<tr><td colspan="4">No pending orders.</td></tr>';
+
             // Render Inventory
             if (inventory) {
                 document.getElementById('inventory-table').innerHTML = inventory.map(item => {
@@ -182,8 +282,6 @@
             await dbClient.from('inventory').insert([item]);
             loadAdmin();
         }
-        
-        // ... (rest of functions) ...
 
         async function markPaid(id) {
             await dbClient.from('orders').update({ status: 'paid' }).eq('id', id);

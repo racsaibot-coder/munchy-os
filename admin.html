@@ -133,7 +133,8 @@
                     });
                 }
             } catch (e) {
-                alert("Network Error: " + e.message);
+                console.error(e);
+                // Fallback to default if offline
             }
         }
 
@@ -182,10 +183,6 @@
         }
 
         async function loadAdmin() {
-        const SUPABASE_KEY = "sb_publishable_ThXosDHFvZjyk02iWoFqXQ_dAVDKGVE";
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-        async function loadAdmin() {
             // Fetch Inventory
             const { data: inventory } = await supabase.from('inventory').select('*').order('name');
             // Fetch Orders
@@ -196,21 +193,23 @@
             let revenue = 0;
             let sold = 0;
 
-            orders.forEach(o => {
-                if (o.status === 'paid') {
-                    sold++;
-                    revenue += o.price;
-                    const item = inventory.find(i => i.name === o.item_name);
-                    if (item) profit += (o.price - item.cost);
-                }
-            });
+            if (orders) {
+                orders.forEach(o => {
+                    if (o.status === 'paid') {
+                        sold++;
+                        revenue += o.price;
+                        const item = inventory.find(i => i.name === o.item_name);
+                        if (item) profit += (o.price - item.cost);
+                    }
+                });
+            }
 
             document.getElementById('stat-profit').innerText = "$" + profit.toFixed(2);
             document.getElementById('stat-revenue').innerText = "$" + revenue.toFixed(2);
             document.getElementById('stat-sold').innerText = sold;
 
             // Render Orders
-            const pendingOrders = orders.filter(o => o.status === 'pending');
+            const pendingOrders = orders ? orders.filter(o => o.status === 'pending') : [];
             document.getElementById('orders-table').innerHTML = pendingOrders.length ? pendingOrders.map(o => `
                 <tr>
                     <td>${o.student_name}</td>
@@ -221,18 +220,20 @@
             `).join('') : '<tr><td colspan="4">No pending orders.</td></tr>';
 
             // Render Inventory
-            document.getElementById('inventory-table').innerHTML = inventory.map(item => {
-                const margin = item.price > 0 ? ((item.price - item.cost) / item.price * 100) : 0;
-                return `
-                <tr>
-                    <td>${item.name}</td>
-                    <td>${item.stock}</td>
-                    <td>$${item.cost}</td>
-                    <td>$${item.price}</td>
-                    <td class="${margin > 40 ? 'margin-high' : 'margin-low'}">${margin.toFixed(0)}%</td>
-                    <td><button onclick="deleteItem(${item.id})" style="color:red; background:none; border:none;">×</button></td>
-                </tr>`;
-            }).join('');
+            if (inventory) {
+                document.getElementById('inventory-table').innerHTML = inventory.map(item => {
+                    const margin = item.price > 0 ? ((item.price - item.cost) / item.price * 100) : 0;
+                    return `
+                    <tr>
+                        <td>${item.name}</td>
+                        <td>${item.stock}</td>
+                        <td>$${item.cost}</td>
+                        <td>$${item.price}</td>
+                        <td class="${margin > 40 ? 'margin-high' : 'margin-low'}">${margin.toFixed(0)}%</td>
+                        <td><button onclick="deleteItem(${item.id})" style="color:red; background:none; border:none;">×</button></td>
+                    </tr>`;
+                }).join('');
+            }
         }
 
         async function addItem() {
@@ -297,8 +298,6 @@
             calcMargin();
             alert("Calculated! Now name it and add image below.");
         }
-
-        loadAdmin();
     </script>
 </body>
 </html>

@@ -8,7 +8,14 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-    <div class="container">
+    <div id="login-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:999; display:flex; align-items:center; justify-content:center; flex-direction:column;">
+        <h2 style="color:#fff; margin-bottom:20px;">Enter PIN</h2>
+        <input type="password" id="pin-input" style="padding:15px; font-size:1.5rem; text-align:center; width:150px; border-radius:8px; border:1px solid #333; background:#111; color:#fff; letter-spacing:5px;" maxlength="4">
+        <button onclick="checkPin()" class="btn-primary" style="margin-top:20px; width:150px;">Unlock</button>
+        <p id="error-msg" style="color:red; display:none; margin-top:10px;">Access Denied</p>
+    </div>
+
+    <div class="container" id="admin-content" style="filter:blur(10px); pointer-events:none;">
         <header>
             <h1>Admin Dashboard</h1>
             <a href="/shop.html" class="nav-link">← Shop</a>
@@ -97,6 +104,35 @@
 
     <script>
         // CONFIG
+        const ADMIN_PIN = "1111"; // Son
+        const VIEW_PIN = "2222";  // Mom
+        let userRole = null;
+
+        function checkPin() {
+            const pin = document.getElementById('pin-input').value;
+            if (pin === ADMIN_PIN) {
+                userRole = 'admin';
+                unlock();
+            } else if (pin === VIEW_PIN) {
+                userRole = 'viewer';
+                unlock();
+                // Hide controls for Mom
+                document.querySelectorAll('.btn-primary, .btn-outline, .action-btn').forEach(el => el.style.display = 'none');
+                // Hide Bag Builder and Add Item forms
+                document.querySelectorAll('.admin-section input').forEach(el => el.disabled = true);
+            } else {
+                document.getElementById('error-msg').style.display = 'block';
+                document.getElementById('pin-input').value = '';
+            }
+        }
+
+        function unlock() {
+            document.getElementById('login-modal').style.display = 'none';
+            document.getElementById('admin-content').style.filter = 'none';
+            document.getElementById('admin-content').style.pointerEvents = 'all';
+            loadAdmin();
+        }
+
         const SUPABASE_URL = "https://mtscvmxqhigyijcsozgd.supabase.co";
         const SUPABASE_KEY = "sb_publishable_ThXosDHFvZjyk02iWoFqXQ_dAVDKGVE";
         const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);

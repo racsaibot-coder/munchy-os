@@ -15,6 +15,14 @@
         <p id="error-msg" style="color:red; display:none; margin-top:10px;">Access Denied</p>
     </div>
 
+    <!-- Change PIN Modal -->
+    <div id="reset-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:1000; display:none; align-items:center; justify-content:center; flex-direction:column;">
+        <h2 style="color:#fff; margin-bottom:10px;">⚠️ Set New PIN</h2>
+        <p style="color:#aaa; margin-bottom:20px;">Default PIN detected.</p>
+        <input type="password" id="new-pin" placeholder="New PIN" style="padding:15px; font-size:1.5rem; text-align:center; width:150px; border-radius:8px; border:1px solid #333; background:#111; color:#fff; letter-spacing:5px;" maxlength="4">
+        <button onclick="saveNewPin()" class="btn-primary" style="margin-top:20px; width:150px;">Save</button>
+    </div>
+
     <div class="container" id="admin-content" style="filter:blur(10px); pointer-events:none;">
         <header>
             <h1>Admin Dashboard</h1>
@@ -104,26 +112,58 @@
 
     <script>
         // CONFIG
-        const ADMIN_PIN = "1111"; // Son
-        const VIEW_PIN = "2222";  // Mom
+        const SUPABASE_URL = "https://mtscvmxqhigyijcsozgd.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_ThXosDHFvZjyk02iWoFqXQ_dAVDKGVE";
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let dbPins = { admin: '1111', view: '2222' };
         let userRole = null;
 
-        function checkPin() {
+        async function fetchPins() {
+            const { data } = await supabase.from('settings').select('*');
+            if (data) {
+                data.forEach(row => {
+                    if (row.key === 'admin_pin') dbPins.admin = row.value;
+                    if (row.key === 'view_pin') dbPins.view = row.value;
+                });
+            }
+        }
+
+        async function checkPin() {
+            await fetchPins(); // Ensure fresh
             const pin = document.getElementById('pin-input').value;
-            if (pin === ADMIN_PIN) {
+            
+            if (pin === dbPins.admin) {
                 userRole = 'admin';
+                if (pin === '1111') return showResetModal();
                 unlock();
-            } else if (pin === VIEW_PIN) {
+            } else if (pin === dbPins.view) {
                 userRole = 'viewer';
+                if (pin === '2222') return showResetModal();
                 unlock();
                 // Hide controls for Mom
                 document.querySelectorAll('.btn-primary, .btn-outline, .action-btn').forEach(el => el.style.display = 'none');
-                // Hide Bag Builder and Add Item forms
                 document.querySelectorAll('.admin-section input').forEach(el => el.disabled = true);
             } else {
                 document.getElementById('error-msg').style.display = 'block';
                 document.getElementById('pin-input').value = '';
             }
+        }
+
+        function showResetModal() {
+            document.getElementById('login-modal').style.display = 'none';
+            document.getElementById('reset-modal').style.display = 'flex';
+        }
+
+        async function saveNewPin() {
+            const newPin = document.getElementById('new-pin').value;
+            if (newPin.length < 4) return alert("4 digits required.");
+            
+            const key = userRole === 'admin' ? 'admin_pin' : 'view_pin';
+            
+            await supabase.from('settings').upsert({ key: key, value: newPin });
+            alert("PIN Updated! Please login with new PIN.");
+            window.location.reload();
         }
 
         function unlock() {
@@ -133,7 +173,7 @@
             loadAdmin();
         }
 
-        const SUPABASE_URL = "https://mtscvmxqhigyijcsozgd.supabase.co";
+        async function loadAdmin() {
         const SUPABASE_KEY = "sb_publishable_ThXosDHFvZjyk02iWoFqXQ_dAVDKGVE";
         const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 

@@ -120,12 +120,20 @@
         let userRole = null;
 
         async function fetchPins() {
-            const { data } = await supabase.from('settings').select('*');
-            if (data) {
-                data.forEach(row => {
-                    if (row.key === 'admin_pin') dbPins.admin = row.value;
-                    if (row.key === 'view_pin') dbPins.view = row.value;
-                });
+            try {
+                const { data, error } = await supabase.from('settings').select('*');
+                if (error) {
+                    alert("DB Error: " + error.message);
+                    return;
+                }
+                if (data) {
+                    data.forEach(row => {
+                        if (row.key === 'admin_pin') dbPins.admin = row.value;
+                        if (row.key === 'view_pin') dbPins.view = row.value;
+                    });
+                }
+            } catch (e) {
+                alert("Network Error: " + e.message);
             }
         }
 

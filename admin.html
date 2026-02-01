@@ -30,12 +30,6 @@
         <button onclick="window.open('/shop.html?mode=test')" class="btn" style="background:rgba(255,255,255,0.2); font-size:0.8rem; padding:4px 8px;">Test Shop ↗️</button>
     </div>
 
-    <div id="dad-banner" style="display:none; background:#ff003c; color:white; padding:10px; text-align:center; font-weight:bold; justify-content:space-between; align-items:center;">
-        <span>🧪 DAD MODE (Test Data Only)</span>
-        <button onclick="wipeTestData()" class="btn" style="background:#fff; color:#ff003c; font-size:0.8rem; padding:4px 8px;">Wipe Data 🗑️</button>
-        <button onclick="window.open('/shop.html?mode=test')" class="btn" style="background:rgba(255,255,255,0.2); font-size:0.8rem; padding:4px 8px;">Test Shop ↗️</button>
-    </div>
-
     <div class="container" id="admin-content" style="filter:blur(10px); pointer-events:none;">
         <header>
             <h1>Admin Dashboard</h1>
@@ -137,17 +131,26 @@
         const SUPABASE_URL = "https://mtscvmxqhigyijcsozgd.supabase.co";
         const SUPABASE_KEY = "sb_publishable_ThXosDHFvZjyk02iWoFqXQ_dAVDKGVE";
         
-        // Use 'dbClient' to avoid shadowing the global 'supabase' object from CDN
-        const dbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-        let dbPins = { admin: '1111', view: '2222' };
+        let dbClient = null;
+        let dbPins = { admin: '1111', view: '2222', dad: '0000' }; // Default PINs
         let userRole = null;
+        let isTestMode = false;
+
+        // Init on Load to ensure Library exists
+        window.addEventListener('load', () => {
+            if (window.supabase) {
+                dbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            } else {
+                alert("Failed to load database library. Check connection.");
+            }
+        });
 
         async function fetchPins() {
+            if (!dbClient) return alert("Database initializing... try again.");
             try {
                 const { data, error } = await dbClient.from('settings').select('*');
                 if (error) {
-                    alert("DB Error: " + error.message);
+                    console.error("DB Error: " + error.message);
                     return;
                 }
                 if (data) {
@@ -157,7 +160,7 @@
                     });
                 }
             } catch (e) {
-                alert("Network Error: " + e.message);
+                console.error("Network Error: " + e.message);
             }
         }
 
@@ -165,12 +168,19 @@
             await fetchPins(); // Ensure fresh
             const pin = document.getElementById('pin-input').value;
             
-            if (pin === dbPins.admin) {
+            if (pin === dbPins.dad) {
+                userRole = 'dad';
+                isTestMode = true;
+                unlock();
+                document.getElementById('dad-banner').style.display = 'flex';
+            } else if (pin === dbPins.admin) {
                 userRole = 'admin';
+                isTestMode = false;
                 if (pin === '1111') return showResetModal();
                 unlock();
             } else if (pin === dbPins.view) {
                 userRole = 'viewer';
+                isTestMode = false;
                 if (pin === '2222') return showResetModal();
                 unlock();
                 // Hide controls for Mom
@@ -206,10 +216,19 @@
         }
 
         async function loadAdmin() {
-            // Fetch Inventory
-            const { data: inventory } = await dbClient.from('inventory').select('*').order('name');
-            // Fetch Orders
-            const { data: orders } = await dbClient.from('orders').select('*').order('created_at', { ascending: false });
+            if (!dbClient) return;
+            
+            // Fetch Inventory (Filter by Test Mode)
+            const { data: inventory } = await dbClient.from('inventory')
+                .select('*')
+                .eq('is_test', isTestMode)
+                .order('name');
+            
+            // Fetch Orders (Filter by Test Mode)
+            const { data: orders } = await dbClient.from('orders')
+                .select('*')
+                .eq('is_test', isTestMode)
+                .order('created_at', { ascending: false });
 
             // Calc Stats
             let profit = 0;
@@ -238,13 +257,17 @@
                     <td>${o.student_name}</td>
                     <td>${o.item_name}</td>
                     <td style="color: #ff003c; font-weight: bold;">$${o.price}</td>
-                    <td><button onclick="markPaid(${o.id})" class="btn" style="background: #00ff9d; color: black; padding: 4px 8px; font-size: 0.8rem;">Paid ✅</button></td>
+                    <td>
+                        <button onclick="markPaid(${o.id})" class="btn" style="background: #00ff9d; color: black; padding: 4px 8px; font-size: 0.8rem;">Paid ✅</button>
+                        <button onclick="editDebt(${o.id}, ${o.price}, '${o.item_name}', '${o.student_name}')" class="btn" style="background: #3b82f6; color: white; padding: 4px 8px; font-size: 0.8rem;">Edit ✏️</button>
+                    </td>
                 </tr>
             `).join('') : '<tr><td colspan="4">No pending orders.</td></tr>';
 
             // Render Inventory
             if (inventory) {
                 document.getElementById('inventory-table').innerHTML = inventory.map(item => {
+                    const margin = item.price > 0 ? ((item.price - item.cost) / item.price * 100) : 0;
                     return `
                     <tr>
                         <td>${item.name}</td>
@@ -259,6 +282,31 @@
             }
         }
 
+        // Edit Debt Logic (Split Payment)
+        async function editDebt(id, oldPrice, itemName, studentName) {
+            const newDebt = prompt(`Total Debt is $${oldPrice}. Enter remaining debt amount:`);
+            if (newDebt === null) return;
+            const newPrice = parseFloat(newDebt);
+            if (isNaN(newPrice)) return alert("Invalid amount");
+
+            const paidAmount = oldPrice - newPrice;
+            if (paidAmount < 0) return alert("New debt cannot be higher than original!");
+
+            // 1. Create Partial Payment Record
+            await dbClient.from('orders').insert([{
+                student_name: studentName,
+                item_name: itemName + " (Partial)",
+                price: paidAmount,
+                status: 'paid',
+                is_test: isTestMode
+            }]);
+
+            // 2. Update Pending Order
+            await dbClient.from('orders').update({ price: newPrice }).eq('id', id);
+            
+            loadAdmin();
+        }
+
         function openLoadModal(id, name, homeStock) {
             selectedLoadItem = { id, homeStock };
             document.getElementById('load-item-name').innerText = `${name} (Available: ${homeStock})`;
@@ -270,8 +318,6 @@
             if (!qty || qty < 1) return alert("Enter qty");
             if (qty > selectedLoadItem.homeStock) return alert("Not enough at home!");
 
-            // DB Update: Decrement Home, Increment Stock (Bag)
-            // Note: Not atomic in this simple client, but fine for single user
             const { data: item } = await dbClient.from('inventory').select('stock, home_stock').eq('id', selectedLoadItem.id).single();
             
             await dbClient.from('inventory').update({
@@ -290,7 +336,8 @@
                 cost: parseFloat(document.getElementById('newCost').value),
                 price: parseFloat(document.getElementById('newPrice').value),
                 home_stock: parseInt(document.getElementById('newStock').value),
-                stock: 0 // Bag starts empty
+                stock: 0, // Bag starts empty
+                is_test: isTestMode
             };
             await dbClient.from('inventory').insert([item]);
             loadAdmin();
@@ -345,6 +392,36 @@
             document.getElementById('newName').value = "Bundle Bag";
             calcMargin();
             alert("Calculated! Now name it and add image below.");
+        }
+
+        async function wipeTestData() {
+            if(!confirm("Wipe ALL your test data? This cannot be undone.")) return;
+            await dbClient.from('inventory').delete().eq('is_test', true);
+            await dbClient.from('orders').delete().eq('is_test', true);
+            alert("Test Data Cleaned.");
+            loadAdmin();
+        }
+
+        async function loadTestData() {
+            if(!isTestMode) return alert("Switch to Dad Mode (0000) first.");
+            
+            // Add Fake Inventory
+            const items = [
+                { name: "Takis Fuego (Test)", cost: 0.50, price: 2.00, stock: 20, home_stock: 50, is_test: true, image_url: "https://m.media-amazon.com/images/I/81UeDk8jZPL.jpg" },
+                { name: "Gatorade Blue (Test)", cost: 0.80, price: 2.50, stock: 5, home_stock: 24, is_test: true, image_url: "https://m.media-amazon.com/images/I/71w-JtZqZPL._AC_SL1500_.jpg" },
+                { name: "Oreos (Test)", cost: 0.30, price: 1.00, stock: 0, home_stock: 10, is_test: true, image_url: "https://m.media-amazon.com/images/I/51sw5Xq-iUL._AC_SX679_.jpg" }
+            ];
+            await dbClient.from('inventory').insert(items);
+
+            // Add Fake Orders
+            const orders = [
+                { student_name: "SnackKing", item_name: "Takis Fuego (Test)", price: 2.00, status: "pending", is_test: true },
+                { student_name: "Viper", item_name: "Gatorade Blue (Test)", price: 2.50, status: "pending", is_test: true }
+            ];
+            await dbClient.from('orders').insert(orders);
+            
+            loadAdmin();
+            alert("Sample Data Loaded.");
         }
     </script>
 </body>

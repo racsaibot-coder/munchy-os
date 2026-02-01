@@ -48,6 +48,18 @@
             </table>
         </div>
 
+        <!-- Bag Builder -->
+        <div class="admin-section">
+            <h3>🎒 Bag Builder (Bundle Calculator)</h3>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+                <div class="form-group"><label>Bulk Cost ($)</label><input type="number" id="bagCost" placeholder="15.00" oninput="calcBag()"></div>
+                <div class="form-group"><label>Units in Box</label><input type="number" id="bagCount" placeholder="30" oninput="calcBag()"></div>
+                <div class="form-group"><label>Sell Price ($)</label><input type="number" id="bagPrice" value="3.00" oninput="calcBag()"></div>
+                <div class="form-group" style="display:flex; align-items:flex-end;"><div id="bag-display">Unit Cost: -</div></div>
+            </div>
+            <button class="btn btn-outline" onclick="addBag()">Create Product</button>
+        </div>
+
         <!-- Add Item -->
         <div class="admin-section">
             <h3>Add New Item</h3>
@@ -172,6 +184,34 @@
                 const profit = price - cost;
                 display.innerText = `Profit: $${profit.toFixed(2)} (${margin.toFixed(0)}%)`;
             }
+        }
+
+        function calcBag() {
+            const cost = parseFloat(document.getElementById('bagCost').value) || 0;
+            const count = parseInt(document.getElementById('bagCount').value) || 1;
+            const price = parseFloat(document.getElementById('bagPrice').value) || 0;
+            const display = document.getElementById('bag-display');
+            
+            if (cost > 0 && count > 0) {
+                const unitCost = cost / count;
+                const profit = price - unitCost;
+                const margin = ((price - unitCost) / price) * 100;
+                display.innerText = `Cost: $${unitCost.toFixed(2)} | Profit: $${profit.toFixed(2)} (${margin.toFixed(0)}%)`;
+                display.style.color = margin > 50 ? 'var(--success)' : '#fff';
+            }
+        }
+
+        function addBag() {
+            const cost = parseFloat(document.getElementById('bagCost').value) || 0;
+            const count = parseInt(document.getElementById('bagCount').value) || 1;
+            const price = parseFloat(document.getElementById('bagPrice').value) || 0;
+            
+            // Prefill standard form
+            document.getElementById('newCost').value = (cost / count).toFixed(2);
+            document.getElementById('newPrice').value = price.toFixed(2);
+            document.getElementById('newName').value = "Bundle Bag";
+            calcMargin();
+            alert("Calculated! Now name it and add image below.");
         }
 
         loadAdmin();

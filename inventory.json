@@ -1,0 +1,26 @@
+[
+    {
+        "id": 1,
+        "name": "Takis Fuego",
+        "image": "https://m.media-amazon.com/images/I/81s2-aB7CXL.jpg",
+        "cost": 1.50,
+        "price": 3.00,
+        "stock": 12
+    },
+    {
+        "id": 2,
+        "name": "Oreos (6 pack)",
+        "image": "https://m.media-amazon.com/images/I/71wYk-iXUCL.jpg",
+        "cost": 0.50,
+        "price": 1.00,
+        "stock": 24
+    },
+    {
+        "id": 3,
+        "name": "Gatorade (Blue)",
+        "image": "https://m.media-amazon.com/images/I/71rQ6qN6kUL.jpg",
+        "cost": 1.00,
+        "price": 2.50,
+        "stock": 8
+    }
+]

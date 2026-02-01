@@ -405,23 +405,42 @@
         async function loadTestData() {
             if(!isTestMode) return alert("Switch to Dad Mode (0000) first.");
             
-            // Add Fake Inventory
+            // 1. Diverse Inventory (Chips, Drinks, Candy, Bundles)
             const items = [
                 { name: "Takis Fuego (Test)", cost: 0.50, price: 2.00, stock: 20, home_stock: 50, is_test: true, image_url: "https://m.media-amazon.com/images/I/81UeDk8jZPL.jpg" },
-                { name: "Gatorade Blue (Test)", cost: 0.80, price: 2.50, stock: 5, home_stock: 24, is_test: true, image_url: "https://m.media-amazon.com/images/I/71w-JtZqZPL._AC_SL1500_.jpg" },
-                { name: "Oreos (Test)", cost: 0.30, price: 1.00, stock: 0, home_stock: 10, is_test: true, image_url: "https://m.media-amazon.com/images/I/51sw5Xq-iUL._AC_SX679_.jpg" }
+                { name: "Hot Cheetos (Test)", cost: 0.50, price: 2.00, stock: 5, home_stock: 10, is_test: true, image_url: "https://m.media-amazon.com/images/I/81vJyb43Z-L.jpg" },
+                { name: "Gatorade Blue (Test)", cost: 0.80, price: 2.50, stock: 2, home_stock: 24, is_test: true, image_url: "https://m.media-amazon.com/images/I/71w-JtZqZPL._AC_SL1500_.jpg" },
+                { name: "Oreos (Test)", cost: 0.30, price: 1.00, stock: 0, home_stock: 10, is_test: true, image_url: "https://m.media-amazon.com/images/I/51sw5Xq-iUL._AC_SX679_.jpg" },
+                { name: "Sour Patch Kids (Test)", cost: 0.40, price: 1.50, stock: 15, home_stock: 40, is_test: true, image_url: "https://m.media-amazon.com/images/I/81S8X-pGjDL.jpg" },
+                { name: "Airheads Extreme (Test)", cost: 0.20, price: 1.00, stock: 30, home_stock: 100, is_test: true, image_url: "https://m.media-amazon.com/images/I/81z3Z1y7zIL.jpg" },
+                { name: "Munchy Mystery Bag (Test)", cost: 1.50, price: 5.00, stock: 3, home_stock: 5, is_test: true, image_url: "https://m.media-amazon.com/images/I/61+y+y+y+yL.jpg" }
             ];
             await dbClient.from('inventory').insert(items);
 
-            // Add Fake Orders
-            const orders = [
-                { student_name: "SnackKing", item_name: "Takis Fuego (Test)", price: 2.00, status: "pending", is_test: true },
-                { student_name: "Viper", item_name: "Gatorade Blue (Test)", price: 2.50, status: "pending", is_test: true }
-            ];
+            // 2. Orders (Paid, Pending, Big Spenders)
+            const students = ["SnackKing", "Viper", "Alex", "Sarah", "J-Dog", "Mikey"];
+            const orders = [];
+            
+            // Paid Orders (Revenue)
+            for(let i=0; i<8; i++) {
+                orders.push({ 
+                    student_name: students[Math.floor(Math.random()*students.length)],
+                    item_name: items[Math.floor(Math.random()*items.length)].name,
+                    price: 2.00,
+                    status: "paid",
+                    is_test: true
+                });
+            }
+
+            // Pending Orders (Debt)
+            orders.push({ student_name: "Broke_Brian", item_name: "Takis Fuego (Test)", price: 2.00, status: "pending", is_test: true });
+            orders.push({ student_name: "Forgetful_Frank", item_name: "Gatorade Blue (Test)", price: 2.50, status: "pending", is_test: true });
+            orders.push({ student_name: "SnackKing", item_name: "Munchy Mystery Bag (Test)", price: 5.00, status: "pending", is_test: true });
+
             await dbClient.from('orders').insert(orders);
             
             loadAdmin();
-            alert("Sample Data Loaded.");
+            alert("🔥 CHAOS MODE LOADED. Check the dashboard.");
         }
     </script>
 </body>

@@ -5,31 +5,54 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MunchyOS</title>
     <link rel="stylesheet" href="static/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        /* Golden Ticket Animation */
+        @keyframes goldFlash {
+            0% { background: #000; }
+            50% { background: #d4af37; }
+            100% { background: #000; }
+        }
+        .winner-mode { animation: goldFlash 1s ease-in-out; }
+    </style>
 </head>
 <body>
     <div class="container">
         <header>
             <h1 class="logo">MunchyOS</h1>
-            <a href="/admin.html" class="btn-small btn-outline">Admin 🔒</a>
+            <div id="user-area">
+                <button onclick="openLogin()" class="btn-small btn-outline">Login 👤</button>
+            </div>
         </header>
 
         <div class="grid" id="product-grid">
-            <!-- Items injected here -->
             <div style="color:#666; text-align:center; grid-column:1/-1;">Loading Snacks...</div>
+        </div>
+        
+        <div style="text-align:center; margin-top:20px;">
+            <a href="/admin.html" style="color:#333; text-decoration:none; font-size:0.8rem;">Admin Login</a>
         </div>
     </div>
 
-    <!-- Reserve Modal -->
-    <div id="modal" class="modal">
-        <div class="modal-content">
-            <h3>Reserve Item</h3>
-            <p id="modal-item-name">Takis</p>
-            <input type="text" id="student-name" placeholder="Your Name">
-            <div class="modal-actions">
-                <button onclick="closeModal()" class="btn-outline">Cancel</button>
-                <button onclick="confirmReserve()" class="btn-primary">Reserve</button>
-            </div>
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); align-items:center; justify-content:center; z-index:100;">
+        <div style="background:#111; padding:30px; border-radius:12px; border:1px solid #333; width:300px;">
+            <h3>Munchie Tag</h3>
+            <p style="color:#aaa; font-size:0.9rem;">Join the squad. Win rewards.</p>
+            <input type="text" id="login-tag" placeholder="Gamertag" style="width:100%; padding:10px; margin:5px 0; background:#000; border:1px solid #333; color:#fff;">
+            <input type="password" id="login-pin" placeholder="PIN (4 digits)" style="width:100%; padding:10px; margin:5px 0; background:#000; border:1px solid #333; color:#fff;" maxlength="4">
+            <button onclick="doLogin()" class="btn-primary" style="width:100%; margin-top:10px;">Login / Join</button>
+            <button onclick="document.getElementById('login-modal').style.display='none'" class="btn-outline" style="width:100%; margin-top:10px;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Winner Modal -->
+    <div id="winner-modal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(212, 175, 55, 0.9); align-items:center; justify-content:center; z-index:200;">
+        <div style="text-align:center; color:#000;">
+            <h1 style="font-size:3rem; margin:0;">🎫 WINNER!</h1>
+            <p style="font-weight:bold; font-size:1.2rem;">You found a Golden Ticket!</p>
+            <p>Show this screen to Rico for a FREE item.</p>
+            <button onclick="document.getElementById('winner-modal').style.display='none'" class="btn" style="background:#000; color:#d4af37; border:none; padding:10px 30px; font-weight:bold;">CLAIM</button>
         </div>
     </div>
 
@@ -37,17 +60,78 @@
         // CONFIG
         const SUPABASE_URL = "https://mtscvmxqhigyijcsozgd.supabase.co";
         const SUPABASE_KEY = "sb_publishable_ThXosDHFvZjyk02iWoFqXQ_dAVDKGVE";
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        
+        let dbClient = null;
+        let currentUser = null;
 
-        let selectedItem = null;
+        window.addEventListener('load', () => {
+            if (window.supabase) {
+                dbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                checkSession();
+                loadShop();
+            }
+        });
+
+        function checkSession() {
+            const stored = localStorage.getItem('munchy_user');
+            if (stored) {
+                currentUser = JSON.parse(stored);
+                document.getElementById('user-area').innerHTML = `
+                    <div style="font-size:0.9rem; color:#00ff9d;">${currentUser.tag} <span style="color:#666;">(${currentUser.points} XP)</span></div>
+                    <button onclick="logout()" style="background:none; border:none; color:#444; font-size:0.7rem; cursor:pointer;">Logout</button>
+                `;
+            }
+        }
+
+        async function doLogin() {
+            const tag = document.getElementById('login-tag').value.trim();
+            const pin = document.getElementById('login-pin').value.trim();
+            if (!tag || !pin) return alert("Enter Tag and PIN");
+
+            // Check if exists
+            let { data: users } = await dbClient.from('customers').select('*').eq('tag', tag);
+            
+            if (users && users.length > 0) {
+                // Login
+                if (users[0].pin === pin) {
+                    currentUser = users[0];
+                    saveUser();
+                } else {
+                    return alert("Wrong PIN!");
+                }
+            } else {
+                // Register
+                const { data: newUser, error } = await dbClient.from('customers').insert([{ tag, pin }]).select();
+                if (error) return alert("Error: " + error.message);
+                currentUser = newUser[0];
+                saveUser();
+                alert("Account Created! Welcome to the Squad.");
+            }
+            
+            document.getElementById('login-modal').style.display = 'none';
+            checkSession();
+        }
+
+        function saveUser() {
+            localStorage.setItem('munchy_user', JSON.stringify(currentUser));
+        }
+
+        function logout() {
+            localStorage.removeItem('munchy_user');
+            location.reload();
+        }
+
+        function openLogin() {
+            document.getElementById('login-modal').style.display = 'flex';
+        }
 
         async function loadShop() {
-            const { data, error } = await supabase
+            const { data, error } = await dbClient
                 .from('inventory')
                 .select('*')
                 .order('stock', { ascending: false });
             
-            if (error) return alert("Error loading shop: " + error.message);
+            if (error) return console.error(error);
 
             const grid = document.getElementById('product-grid');
             grid.innerHTML = data.map(item => `
@@ -58,7 +142,7 @@
                         <div class="price">$${item.price}</div>
                         <div class="stock">${item.stock > 0 ? item.stock + ' left' : 'SOLD OUT'}</div>
                         <button 
-                            onclick="openModal('${item.name}', ${item.price}, ${item.stock})" 
+                            onclick="reserveItem('${item.name}', ${item.price}, ${item.stock}, ${item.id})" 
                             class="btn-primary" 
                             ${item.stock < 1 ? 'disabled' : ''}>
                             ${item.stock < 1 ? 'Sold Out' : 'Reserve'}
@@ -68,54 +152,52 @@
             `).join('');
         }
 
-        function openModal(name, price, stock) {
-            if(stock < 1) return;
-            selectedItem = { name, price };
-            document.getElementById('modal-item-name').innerText = name + " - $" + price;
-            document.getElementById('modal').style.display = 'flex';
-        }
-
-        function closeModal() {
-            document.getElementById('modal').style.display = 'none';
-        }
-
-        async function confirmReserve() {
-            const student = document.getElementById('student-name').value;
-            if (!student) return alert("Enter your name!");
-
-            // 1. Create Order
-            const { error: orderErr } = await supabase
-                .from('orders')
-                .insert([{ 
-                    student_name: student, 
-                    item_name: selectedItem.name, 
-                    price: selectedItem.price,
-                    status: 'pending'
-                }]);
-
-            if (orderErr) return alert("Order failed: " + orderErr.message);
-
-            // 2. Decrement Stock (Optimistic)
-            // Real app uses RPC, but this works for MVP
-            const { data: item } = await supabase
-                .from('inventory')
-                .select('stock, id')
-                .eq('name', selectedItem.name)
-                .single();
+        async function reserveItem(name, price, stock, id) {
+            let studentName = "";
             
-            if (item) {
-                await supabase
-                    .from('inventory')
-                    .update({ stock: item.stock - 1 })
-                    .eq('id', item.id);
+            if (currentUser) {
+                studentName = currentUser.tag;
+            } else {
+                studentName = prompt("Enter your Name:");
+                if (!studentName) return;
             }
 
-            alert("Reserved! Pay Rico at lunch.");
-            closeModal();
+            // Gamification Roll
+            const isWinner = currentUser && Math.random() < 0.05; // 5% chance
+
+            // Create Order
+            await dbClient.from('orders').insert([{ 
+                student_name: studentName, 
+                item_name: name, 
+                price: isWinner ? 0 : price, // Free if winner
+                status: 'pending',
+                is_test: false // Default to real
+            }]);
+
+            // Decrement Stock
+            await dbClient.from('inventory').update({ stock: stock - 1 }).eq('id', id);
+
+            if (currentUser) {
+                // Update Points
+                const newPoints = (currentUser.points || 0) + 10;
+                let updateData = { points: newPoints };
+                if (isWinner) updateData.golden_tickets = (currentUser.golden_tickets || 0) + 1;
+                
+                await dbClient.from('customers').update(updateData).eq('id', currentUser.id);
+                currentUser.points = newPoints;
+                saveUser();
+                checkSession();
+            }
+
+            if (isWinner) {
+                document.body.classList.add('winner-mode');
+                document.getElementById('winner-modal').style.display = 'flex';
+            } else {
+                alert(`Reserved for ${studentName}! Pay at lunch.`);
+            }
+            
             loadShop();
         }
-
-        loadShop();
     </script>
 </body>
 </html>

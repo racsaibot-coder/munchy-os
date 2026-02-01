@@ -114,14 +114,16 @@
         // CONFIG
         const SUPABASE_URL = "https://mtscvmxqhigyijcsozgd.supabase.co";
         const SUPABASE_KEY = "sb_publishable_ThXosDHFvZjyk02iWoFqXQ_dAVDKGVE";
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        
+        // Use 'dbClient' to avoid shadowing the global 'supabase' object from CDN
+        const dbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let dbPins = { admin: '1111', view: '2222' };
         let userRole = null;
 
         async function fetchPins() {
             try {
-                const { data, error } = await supabase.from('settings').select('*');
+                const { data, error } = await dbClient.from('settings').select('*');
                 if (error) {
                     console.error("DB Error: " + error.message);
                     return;
@@ -169,7 +171,7 @@
             
             const key = userRole === 'admin' ? 'admin_pin' : 'view_pin';
             
-            await supabase.from('settings').upsert({ key: key, value: newPin });
+            await dbClient.from('settings').upsert({ key: key, value: newPin });
             alert("PIN Updated! Please login with new PIN.");
             window.location.reload();
         }
@@ -183,9 +185,9 @@
 
         async function loadAdmin() {
             // Fetch Inventory
-            const { data: inventory } = await supabase.from('inventory').select('*').order('name');
+            const { data: inventory } = await dbClient.from('inventory').select('*').order('name');
             // Fetch Orders
-            const { data: orders } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+            const { data: orders } = await dbClient.from('orders').select('*').order('created_at', { ascending: false });
 
             // Calc Stats
             let profit = 0;
@@ -243,18 +245,18 @@
                 price: parseFloat(document.getElementById('newPrice').value),
                 stock: parseInt(document.getElementById('newStock').value)
             };
-            await supabase.from('inventory').insert([item]);
+            await dbClient.from('inventory').insert([item]);
             loadAdmin();
         }
 
         async function markPaid(id) {
-            await supabase.from('orders').update({ status: 'paid' }).eq('id', id);
+            await dbClient.from('orders').update({ status: 'paid' }).eq('id', id);
             loadAdmin();
         }
 
         async function deleteItem(id) {
             if(confirm("Delete item?")) {
-                await supabase.from('inventory').delete().eq('id', id);
+                await dbClient.from('inventory').delete().eq('id', id);
                 loadAdmin();
             }
         }

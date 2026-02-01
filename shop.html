@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MunchyOS</title>
+    <link rel="stylesheet" href="static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 class="logo">MunchyOS</h1>
+            <a href="/admin.html" class="btn-small btn-outline">Admin 🔒</a>
+        </header>
+
+        <div class="grid" id="product-grid">
+            <!-- Items injected here -->
+            <div style="color:#666; text-align:center; grid-column:1/-1;">Loading Snacks...</div>
+        </div>
+    </div>
+
+    <!-- Reserve Modal -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h3>Reserve Item</h3>
+            <p id="modal-item-name">Takis</p>
+            <input type="text" id="student-name" placeholder="Your Name">
+            <div class="modal-actions">
+                <button onclick="closeModal()" class="btn-outline">Cancel</button>
+                <button onclick="confirmReserve()" class="btn-primary">Reserve</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CONFIG
+        const SUPABASE_URL = "https://mtscvmxqhigyijcsozgd.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_ThXosDHFvZjyk02iWoFqXQ_dAVDKGVE";
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let selectedItem = null;
+
+        async function loadShop() {
+            const { data, error } = await supabase
+                .from('inventory')
+                .select('*')
+                .order('stock', { ascending: false });
+            
+            if (error) return alert("Error loading shop: " + error.message);
+
+            const grid = document.getElementById('product-grid');
+            grid.innerHTML = data.map(item => `
+                <div class="card ${item.stock < 1 ? 'out-of-stock' : ''}">
+                    <div class="card-img" style="background-image: url('${item.image_url || ''}')"></div>
+                    <div class="card-body">
+                        <h3>${item.name}</h3>
+                        <div class="price">$${item.price}</div>
+                        <div class="stock">${item.stock > 0 ? item.stock + ' left' : 'SOLD OUT'}</div>
+                        <button 
+                            onclick="openModal('${item.name}', ${item.price}, ${item.stock})" 
+                            class="btn-primary" 
+                            ${item.stock < 1 ? 'disabled' : ''}>
+                            ${item.stock < 1 ? 'Sold Out' : 'Reserve'}
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function openModal(name, price, stock) {
+            if(stock < 1) return;
+            selectedItem = { name, price };
+            document.getElementById('modal-item-name').innerText = name + " - $" + price;
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        async function confirmReserve() {
+            const student = document.getElementById('student-name').value;
+            if (!student) return alert("Enter your name!");
+
+            // 1. Create Order
+            const { error: orderErr } = await supabase
+                .from('orders')
+                .insert([{ 
+                    student_name: student, 
+                    item_name: selectedItem.name, 
+                    price: selectedItem.price,
+                    status: 'pending'
+                }]);
+
+            if (orderErr) return alert("Order failed: " + orderErr.message);
+
+            // 2. Decrement Stock (Optimistic)
+            // Real app uses RPC, but this works for MVP
+            const { data: item } = await supabase
+                .from('inventory')
+                .select('stock, id')
+                .eq('name', selectedItem.name)
+                .single();
+            
+            if (item) {
+                await supabase
+                    .from('inventory')
+                    .update({ stock: item.stock - 1 })
+                    .eq('id', item.id);
+            }
+
+            alert("Reserved! Pay Rico at lunch.");
+            closeModal();
+            loadShop();
+        }
+
+        loadShop();
+    </script>
+</body>
+</html>
